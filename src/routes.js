@@ -5,6 +5,7 @@ const { getDb } = require('./db');
 const { parseClaimDate, claimInterval, formatClaimDate } = require('./dates');
 const { evaluateDraft, publishVersion, latestVersionNo, getVersionDetail, getVersionSummary } = require('./publish');
 const { buildRestorePreview, restoreDraftFromVersion, draftRevisionNo } = require('./restore');
+const { buildImportPreview, confirmImport } = require('./importpack');
 
 const router = express.Router();
 
@@ -325,6 +326,36 @@ router.post('/api/editor/restore', (req, res) => {
   }
   const result = restoreDraftFromVersion({ versionNo, expectedRevision, expectedLatestVersionNo });
   res.status(200).json({ ok: true, ...result });
+});
+
+// ---- JSON 采访整理包导入：只读预览，不写库 ----
+// 体：{ package: { batchId, events:[{key,title,description?,claims:[{precision,year,month?,day?,source,note?}]}],
+//                 relations?:[{earlierKey,laterKey,source?,note?}] } }
+// 键重复、关系引用缺失、日期或出处非法等问题一次性列出，整包拒绝（422）。
+router.post('/api/editor/import-preview', (req, res) => {
+  if (!req.body || !('package' in req.body)) throw badRequest('请求体必须包含 package 字段（JSON 采访整理包）');
+  const preview = buildImportPreview(req.body.package);
+  res.json({ ok: true, ...preview });
+});
+
+// ---- 确认导入：原包 + 预览指纹 + 预览草稿修订号；一个事务追加整包 ----
+// 体：{ package, fingerprint, draftRevisionNo }
+// 409：PACKAGE_FINGERPRINT_MISMATCH（内容被替换）/ DRAFT_REVISION_CONFLICT（草稿已变化）
+//      / BATCH_ALREADY_IMPORTED（批次标识曾成功导入）；422：整包校验失败
+router.post('/api/editor/import', (req, res) => {
+  if (!req.body || !('package' in req.body)) throw badRequest('请求体必须包含 package 字段（JSON 采访整理包）');
+  const expectedRevision = Number(req.body.draftRevisionNo);
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
+    throw badRequest('draftRevisionNo 必须是非负整数（取预览返回的值）');
+  }
+  const fingerprint = req.body.fingerprint;
+  if (typeof fingerprint !== 'string') throw badRequest('fingerprint 必须是预览返回的内容指纹字符串');
+  const result = confirmImport({
+    pkg: req.body.package,
+    fingerprint,
+    expectedRevision,
+  });
+  res.status(201).json({ ok: true, ...result });
 });
 
 module.exports = router;

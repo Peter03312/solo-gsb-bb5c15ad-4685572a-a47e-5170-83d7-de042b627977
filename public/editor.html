@@ -20,6 +20,27 @@
     <div id="globalMsg"></div>
 
     <div class="card">
+      <h2>上传 JSON 采访整理包</h2>
+      <p class="muted">
+        一次导入一个批次：<code>batchId</code>（批次标识）、以包内唯一 <code>key</code> 标记的事件、
+        每事件多条带年/月/日精度与出处的时间主张，以及按键引用事件的「先于」关系。
+        先<b>只读预览</b>待写入内容与数量；键重复、关系引用缺失、日期或出处非法会整包拒绝。
+        确认后整包在一个事务中<b>追加</b>到当前草稿（不覆盖现有内容、不动历史快照与访客视图），
+        导入内容仍需逐事件选定主张并通过现有先后校验后发布。
+      </p>
+      <div class="row">
+        <div class="field" style="max-width:360px">
+          <label>选择采访整理包 JSON 文件（或直接粘贴到右侧文本框）</label>
+          <input type="file" id="importFile" accept="application/json,.json" />
+        </div>
+        <button id="btnImportPreview" type="button" class="secondary">只读预览待写入内容</button>
+      </div>
+      <label style="margin-top:8px">采访整理包 JSON</label>
+      <textarea id="importJson" style="min-height:120px;font-family:monospace"
+        placeholder='{"batchId":"batch-2026-01","events":[{"key":"dongyuan","title":"动员会","claims":[{"precision":"day","year":1958,"month":9,"day":12,"source":"李宝山口述"}]}],"relations":[{"earlierKey":"dongyuan","laterKey":"tongshui"}]}'></textarea>
+    </div>
+
+    <div class="card">
       <h2>发布</h2>
       <p class="muted">
         为<b>每个</b>事件选定一条主张（允许彼此矛盾的主张并存，但发布只能各选一条）。
@@ -99,6 +120,16 @@
     <div class="d-foot">
       <button class="secondary" id="restoreCancel" type="button">取消</button>
       <button id="restoreConfirm" type="button">确认：用该版替换当前草稿</button>
+    </div>
+  </dialog>
+
+  <!-- 采访整理包导入预览对话框 -->
+  <dialog id="importDialog">
+    <div class="d-head">📦 采访整理包导入预览（只读，尚未写入）</div>
+    <div class="d-body" id="importBody">加载预览中…</div>
+    <div class="d-foot">
+      <button class="secondary" id="importCancel" type="button">取消</button>
+      <button id="importConfirm" type="button">确认：整包追加到草稿</button>
     </div>
   </dialog>
 

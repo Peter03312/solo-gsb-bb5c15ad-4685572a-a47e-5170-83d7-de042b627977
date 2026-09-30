@@ -65,10 +65,11 @@ PORT=8080 EDITOR_TOKEN=my-secret npm start
 ### 编辑（http://localhost:3000/editor）
 
 1. 右上角输入编辑者口令并保存。
-2. 在「事件与时间主张」中添加事件；每个事件可添加**任意多条**时间主张，每条必须填写出处（受访人 / 访谈时间 / 档案全宗 / 页码等），矛盾说法可用「考异备注」记录。
-3. 用单选按钮为**每个**事件选定一条拟发布主张（选择只保存在当前浏览器中）。
-4. 在「先于」关系中声明 A 严格先于 B，可附出处。
-5. 「校验能否发布」先预览；「发布新版本」正式生成不可变快照。
+2. 可直接逐条录入；也可在顶部「上传 JSON 采访整理包」按批次一次导入多个事件、多条主张与「先于」关系（先预览、后确认，详见[下文](#上传-json-采访整理包预览--确认整包事务追加)）。
+3. 在「事件与时间主张」中添加事件；每个事件可添加**任意多条**时间主张，每条必须填写出处（受访人 / 访谈时间 / 档案全宗 / 页码等），矛盾说法可用「考异备注」记录。
+4. 用单选按钮为**每个**事件选定一条拟发布主张（选择只保存在当前浏览器中）。
+5. 在「先于」关系中声明 A 严格先于 B，可附出处。
+6. 「校验能否发布」先预览；「发布新版本」正式生成不可变快照。
 
 ### 发布规则（为什么会发布失败）
 
@@ -85,6 +86,78 @@ PORT=8080 EDITOR_TOKEN=my-secret npm start
 3. **时间无解**：区间内不存在满足全部严格先后关系的具体日期。错误信息会给出一条导致矛盾的见证链，例如「冬月会议 先于 春月会议」却分别主张 1958 年 12 月、1958 年 1 月。
 
 发布成功后得到递增版本号（第 1 版、第 2 版……），事件、所选主张（精度、区间、出处、考异）、关系与求解日期全部**复制进版本快照**；此后修改草稿不影响任何旧版本。访客页只展示当前最新版本。
+
+### 上传 JSON 采访整理包（预览 → 确认，整包事务追加）
+
+编辑台顶部「上传 JSON 采访整理包」卡片支持一次性导入一个批次。整理包是一个 JSON 对象：
+
+- `batchId`：**批次标识**（非空字符串）。同一标识一旦成功导入即登记在只追加的导入台账中，再次导入返回冲突。
+- `events`：事件数组，每个事件以包内唯一的 `key` 标记，含 `title`、可选 `description`、以及 `claims` 时间主张数组（每事件至少一条）；每条主张含精度 `precision`（`year` / `month` / `day`）、`year`、按精度需要的 `month` / `day`、必填的 `source` 出处、可选 `note` 考异。
+- `relations`：「先于」关系数组，每项以 `earlierKey` / `laterKey` **按键引用**包内事件，可附 `source` / `note`。
+
+示例：
+
+```json
+{
+  "batchId": "interview-2026-q3-01",
+  "events": [
+    {
+      "key": "dongyuan",
+      "title": "修水渠动员会",
+      "description": "大队在晒谷场召开动员会",
+      "claims": [
+        { "precision": "day", "year": 1958, "month": 9, "day": 12, "source": "李宝山口述，2021-07-05 访谈，录音 03 段 08:12", "note": "中秋节后第三天" },
+        { "precision": "year", "year": 1958, "source": "《县水利志》1994 年版第 87 页" }
+      ]
+    },
+    {
+      "key": "tongshui",
+      "title": "东干渠通水",
+      "claims": [
+        { "precision": "month", "year": 1959, "month": 5, "source": "王秀兰口述，2021-08-02 访谈" }
+      ]
+    }
+  ],
+  "relations": [
+    { "earlierKey": "dongyuan", "laterKey": "tongshui", "source": "二人口述一致" }
+  ]
+}
+```
+
+流程与保证：
+
+1. **只读预览**：先调预览接口（或在编辑台选文件 / 粘贴 JSON 后点「只读预览待写入内容」）。响应列出规范化后的事件、主张（含精度、覆盖区间、出处）、关系，事件 / 主张 / 关系**数量**，当前草稿数量、草稿修订号 `draftRevisionNo` 与**内容指纹** `fingerprint`（对包内容做稳定序列化后的 SHA-256，与 JSON 字段书写顺序无关）。预览不写任何数据。
+2. **整包校验**：出现下列任一问题，预览（及确认）返回 **422**，`errors` 数组**一次性列出全部问题**（带 `type`、位置 `location`、`eventKey` / 主张下标）并**整包拒绝**，不写入任何内容：
+   - `duplicate_key`：事件键在包内重复；
+   - `missing_reference`：关系的 `earlierKey` / `laterKey` 在包内事件中不存在；
+   - `self_relation`：事件先于自身；
+   - `invalid_date`：精度非法、年月日越界或与精度不符（如 2 月 30 日、13 月）；
+   - `invalid_source`：主张缺少非空出处；另有 `invalid_key` / `invalid_title` / `invalid_claims` / `invalid_field` / `malformed_*` 等结构问题。
+3. **确认导入**：必须提交**原包**、预览返回的 **`fingerprint`** 与 **`draftRevisionNo`**。以下情况返回 **409 冲突且不写入**：
+   - `PACKAGE_FINGERPRINT_MISMATCH`：提交的原包与预览时不一致（内容被替换）；
+   - `DRAFT_REVISION_CONFLICT`：预览后草稿被增删改过（修订号变化）；
+   - `BATCH_ALREADY_IMPORTED`：该批次标识曾成功导入（数据库 UNIQUE 约束兜底）。
+4. **一个事务追加整包**：确认成功后在单个事务内只做 INSERT 追加——不清空、不覆盖任何现有草稿；整包导入只推进**一次**草稿修订号。响应返回：
+   - 包内键到草稿 id 的映射 `idMap`：`events:[{key, eventId, claims:[{index, claimId}]}]`、`relations:[{index, relationId, earlierKey, laterKey, earlierEventId, laterEventId}]`；
+   - 新草稿修订号 `revisionNo`、导入数量 `counts`、批次标识与指纹。
+5. **不影响已有内容**：历史版本快照与访客视图完全不触碰；导入的只是普通草稿，**仍须为每个事件选定主张、通过现有的缺主张 / 成环 / 时间无解校验后才能发布**（导入校验只保证结构与引用合法，不做时间求解，例如互相矛盾的时间主张允许导入，发布时仍会被拒）。
+
+命令行调用示例（`X-Editor-Token` 为编辑者口令）：
+
+```bash
+# 1) 只读预览：把整理包包在 { "package": ... } 中提交，记下 fingerprint 与 draftRevisionNo
+curl -s -X POST http://localhost:3000/api/editor/import-preview \
+  -H 'Content-Type: application/json' -H 'X-Editor-Token: change-me-please' \
+  -d "$(jq -c '{package: .}' interview-pack.json)" | jq .
+
+# 2) 确认：原样回传 package，并带上预览返回的 fingerprint 与 draftRevisionNo
+FP='粘贴预览返回的 fingerprint'
+REV='粘贴预览返回的 draftRevisionNo'
+jq -nc --arg fp "$FP" --argjson rev "$REV" \
+  '{package: input, fingerprint: $fp, draftRevisionNo: $rev}' interview-pack.json \
+| curl -s -X POST http://localhost:3000/api/editor/import \
+    -H 'Content-Type: application/json' -H 'X-Editor-Token: change-me-please' -d @- | jq .
+```
 
 ### 从历史版本恢复草稿（预览 → 确认）
 
@@ -123,6 +196,7 @@ PORT=8080 EDITOR_TOKEN=my-secret npm start
 - 单文件 SQLite 数据库：容器中位于 `/app/data/chronicle.db`（Docker 卷 `chronicle-data`），本机直跑位于 `./data/chronicle.db`。
 - 备份：停止写入后复制该 `.db` 文件即可（或使用 SQLite 的 `.backup` 命令）。
 - 历史版本表 `versions / version_events / version_relations` 只追加、不更新不删除，保证不可变。
+- 导入批次台账 `imported_batches` 同样只追加：登记每个成功导入的 `batch_id`（UNIQUE）、内容指纹、导入后修订号与数量，用于批次去重与溯源。
 
 ## 目录结构
 
@@ -135,9 +209,10 @@ src/
   solver.js     Tarjan 环检测 + 拓扑下界传播求严格先后可行解
   publish.js    发布事务：再校验 + 版本冲突检查 + 写不可变快照
   restore.js    恢复草稿：只读预览 + 原子替换事务（修订号/版本号冲突检查、按快照重建）
+  importpack.js 采访整理包：整包校验（键/引用/日期/出处）+ 内容指纹 + 单事务追加（指纹/修订号/批次冲突检查）
   seed.js       演示数据
 public/         访客页与编辑台（原生 HTML/CSS/JS）
-test/           node:test 单元与端到端测试（含成环、无解、409 冲突、草稿恢复）
+test/           node:test 单元与端到端测试（含成环、无解、409 冲突、草稿恢复、整理包导入）
 ```
 
 ## 主要 HTTP API
@@ -161,3 +236,9 @@ test/           node:test 单元与端到端测试（含成环、无解、409 �
 - `POST /api/editor/restore` — 确认恢复；体含 `versionNo`、`draftRevisionNo`、`currentVersionNo`（后两者取预览返回值）
   - 200：`{restoredFromVersionNo, currentVersionNo, revisionNo, idMap:{events,relations}, pendingSelection:[{eventId,claimId}], draft}`
   - 409：`{code:"DRAFT_REVISION_CONFLICT"|"VERSION_CONFLICT", ...}`（草稿或最新版本在确认前变化，数据不变）；版本不存在 404；参数非法 400
+- `POST /api/editor/import-preview` — JSON 采访整理包只读预览；体为 `{package:{batchId,events,relations}}`
+  - 200：`{ok,batchId,fingerprint,draftRevisionNo,alreadyImported,importedAt,counts,currentDraftCounts,events,relations}`（events/relations 为规范化后待写入内容）
+  - 422：`{message, errors:[{type, location, eventKey?, claimIndex?, relationIndex?, message}]}`（键重复/引用缺失/自环/日期或出处非法等全部问题，整包拒绝）；结构非法 400
+- `POST /api/editor/import` — 确认导入：单事务整包追加；体含 `package`（原包）、`fingerprint`、`draftRevisionNo`（后两者取预览返回值）
+  - 201：`{ok,batchId,fingerprint,revisionNo,counts,idMap:{events:[{key,eventId,claims:[{index,claimId}]}],relations:[{index,relationId,earlierKey,laterKey,earlierEventId,laterEventId}]}}`
+  - 409：`{code:"PACKAGE_FINGERPRINT_MISMATCH"|"DRAFT_REVISION_CONFLICT"|"BATCH_ALREADY_IMPORTED", ...}`（内容被替换、草稿已变化、批次标识曾成功导入，均不写入）；422：整包校验失败；参数非法 400

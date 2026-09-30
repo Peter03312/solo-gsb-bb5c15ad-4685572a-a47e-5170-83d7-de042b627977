@@ -75,6 +75,20 @@ BEGIN UPDATE draft_meta SET revision = revision + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS trg_relations_rev_ad AFTER DELETE ON relations
 BEGIN UPDATE draft_meta SET revision = revision + 1 WHERE id = 1; END;
 
+-- ============ 采访整理包导入台账（只追加） ============
+-- 每个成功导入的批次标识登记一次；同一 batchId 再次确认导入即 409，
+-- 且 UNIQUE 约束在数据库层兜底。台账不更新、不删除。
+CREATE TABLE IF NOT EXISTS imported_batches (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id       TEXT NOT NULL UNIQUE,
+  fingerprint    TEXT NOT NULL DEFAULT '',  -- 成功导入时的内容指纹（sha256）
+  revision       INTEGER NOT NULL,          -- 导入后的草稿修订号
+  event_count    INTEGER NOT NULL,
+  claim_count    INTEGER NOT NULL,
+  relation_count INTEGER NOT NULL,
+  imported_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ============ 发布区（不可变版本快照） ============
 CREATE TABLE IF NOT EXISTS versions (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
