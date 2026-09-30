@@ -114,6 +114,21 @@ CREATE TABLE IF NOT EXISTS version_relations (
   sort_order   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_vr_version ON version_relations(version_id);
+
+-- ============ JSON 采访整理包导入台账（只追加，不更新不删除） ============
+-- 每个成功导入的批次标识（batchId）记一行；确认导入时若批次已存在即 409 拒绝，
+-- 保证同一批次不会被重复导入（持久化，跨重启生效）。
+CREATE TABLE IF NOT EXISTS imported_batches (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id       TEXT NOT NULL UNIQUE,
+  fingerprint    TEXT NOT NULL,              -- 预览时返回的 SHA-256 内容指纹
+  event_count    INTEGER NOT NULL,
+  claim_count    INTEGER NOT NULL,
+  relation_count INTEGER NOT NULL,
+  base_revision  INTEGER NOT NULL,           -- 导入前草稿修订号
+  revision_no    INTEGER NOT NULL,           -- 导入后草稿修订号（base + 1）
+  imported_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 let db;

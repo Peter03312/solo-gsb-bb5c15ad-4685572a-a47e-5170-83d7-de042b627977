@@ -44,6 +44,30 @@
     <div class="grid2">
       <section>
         <div class="card">
+          <h2>上传 JSON 采访整理包（追加导入）</h2>
+          <p class="muted">
+            上传包含 <code>batchId</code> 批次标识、以包内唯一 <code>key</code> 标记的事件、
+            每事件多条带年/月/日精度与出处的时间主张、以及按键引用事件的「先于」关系的 JSON 包。
+            先<b>只读预览</b>待写入内容与数量；键重复、关系引用缺失、日期或出处非法时整包拒绝。
+            确认后<b>整包追加</b>到当前草稿（不清空已有内容），不影响历史快照与访客年表；
+            同一批次标识只能成功导入一次。新内容仍需选定主张并校验通过后发布。
+          </p>
+          <div class="row">
+            <div class="field" style="max-width:280px">
+              <label>选择 .json 文件</label>
+              <input type="file" id="importFile" accept=".json,application/json" style="padding:4px" />
+            </div>
+            <button id="btnImportPreviewFile" type="button" class="secondary">读取并预览</button>
+          </div>
+          <label style="margin-top:8px">也可直接粘贴包 JSON</label>
+          <textarea id="importJson" style="min-height:110px" placeholder='{"batchId":"batch-2026-01","events":[{"key":"e1","title":"……","claims":[{"precision":"year","year":1958,"source":"……"}]}],"relations":[]}'></textarea>
+          <div style="margin-top:8px">
+            <button id="btnImportPreviewText" type="button">预览待写入内容</button>
+          </div>
+          <div id="importPreviewResult" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card">
           <h2>事件与时间主张</h2>
           <div id="eventList"></div>
 
@@ -99,6 +123,16 @@
     <div class="d-foot">
       <button class="secondary" id="restoreCancel" type="button">取消</button>
       <button id="restoreConfirm" type="button">确认：用该版替换当前草稿</button>
+    </div>
+  </dialog>
+
+  <!-- 采访整理包导入确认对话框 -->
+  <dialog id="importDialog" style="max-width:820px">
+    <div class="d-head">⤒ 确认导入采访整理包（整包追加到当前草稿）</div>
+    <div class="d-body" id="importDialogBody">加载预览中…</div>
+    <div class="d-foot">
+      <button class="secondary" id="importCancel" type="button">取消</button>
+      <button id="importConfirm" type="button">确认：整包追加写入</button>
     </div>
   </dialog>
 

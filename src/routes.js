@@ -5,6 +5,7 @@ const { getDb } = require('./db');
 const { parseClaimDate, claimInterval, formatClaimDate } = require('./dates');
 const { evaluateDraft, publishVersion, latestVersionNo, getVersionDetail, getVersionSummary } = require('./publish');
 const { buildRestorePreview, restoreDraftFromVersion, draftRevisionNo } = require('./restore');
+const { buildImportPreview, commitImport } = require('./import');
 
 const router = express.Router();
 
@@ -325,6 +326,34 @@ router.post('/api/editor/restore', (req, res) => {
   }
   const result = restoreDraftFromVersion({ versionNo, expectedRevision, expectedLatestVersionNo });
   res.status(200).json({ ok: true, ...result });
+});
+
+// ---- 上传 JSON 采访整理包：只读预览，不写数据 ----
+// 请求体即采访整理包本身：{ batchId, events:[{key,title,description,claims}], relations:[{earlierKey,laterKey,source,note}] }
+// 校验通过返回将追加的内容、数量、内容指纹 fingerprint 与当前草稿修订号；
+// 整包有任何问题（键重复 / 关系引用缺失 / 自环 / 日期或出处非法）返回 422 并列出全部问题。
+router.post('/api/editor/import-preview', (req, res) => {
+  const preview = buildImportPreview(req.body);
+  if (!preview.ok) {
+    return res
+      .status(422)
+      .json({ status: 422, ok: false, message: '采访整理包校验未通过，整包拒绝、未写入任何数据', errors: preview.errors });
+  }
+  res.json(preview);
+});
+
+// ---- 确认导入：原包 + 预览返回的内容指纹 + 草稿修订号；单事务整包追加 ----
+router.post('/api/editor/import-commit', (req, res) => {
+  const body = req.body;
+  if (!body || typeof body !== 'object' || !Object.prototype.hasOwnProperty.call(body, 'pkg')) {
+    throw badRequest('请求体必须包含原包字段 pkg、预览返回的 fingerprint 与 draftRevisionNo');
+  }
+  const result = commitImport({
+    raw: body.pkg,
+    expectedFingerprint: body.fingerprint,
+    expectedRevision: Number(body.draftRevisionNo),
+  });
+  res.status(201).json(result);
 });
 
 module.exports = router;
